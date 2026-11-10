@@ -6,7 +6,7 @@ import matplotlib as plt
 
 from numcompute_stream import *
 from numcompute_stream.io import read_csv_chunks
-from numcompute_stream.visualize import plot_metric_over_time, compare_models, plot_predictions_vs_ground_truth
+from numcompute_stream.visualise import plot_metric_over_time, compare_models, plot_predictions_vs_ground_truth
 
 
 class TreeTests(unittest.TestCase):
