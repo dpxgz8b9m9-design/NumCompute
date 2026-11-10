@@ -318,3 +318,97 @@ Performance depends on hardware, input size and system load.
   batch. An empty input yields no batches.
 - `euclidean_distance` supports broadcasting and axis reductions, using scaled
   calculations to reduce intermediate overflow for large finite distances.
+
+## Assignment 2.2: NumCompute-Stream
+
+The streaming extension is in `numcompute_stream/`; the original `numcompute/`
+implementation remains available. Python 3.10+, NumPy 2+ and matplotlib 3.8+
+are required. Install with `python -m pip install -e .`. No external ML/data
+libraries are used. Tests use Python's built-in unittest.
+
+```python
+from numcompute_stream import Pipeline, SimpleImputer, StandardScaler
+from numcompute_stream import DecisionTreeClassifier, StreamTrainer
+from numcompute_stream.io import read_csv_chunks
+
+pipe = Pipeline([
+    ('impute', SimpleImputer(strategy='mean')),
+    ('scale', StandardScaler()),
+    ('model', DecisionTreeClassifier(max_depth=5, buffer_size=100)),
+])
+trainer = StreamTrainer(pipeline=pipe)
+for i, chunk in enumerate(read_csv_chunks(
+        'demo/data/stream.csv', chunk_size=100, skip_header=1, dtype=float)):
+    X, y = chunk[:, :-1], chunk[:, -1].astype(int)
+    if i > 0:  # first 100 samples warm up this particular model
+        print(trainer.score_chunk(X, y))  # evaluate BEFORE learning
+    trainer.fit_chunk(X, y)
+print(trainer.logs[-1])
+```
+
+Run from the repository root:
+
+```sh
+python -m unittest discover -s tests -v
+python benchmark/run_stream_benchmarks.py
+```
+
+Open `demo/stream_demo.ipynb` in a Python notebook interface and run all cells.
+The notebook includes executed results and plots; its bundled synthetic CSV has
+1,200 rows, three numeric features and missing values (seed 7). Both compared
+models receive the same 300-row warm-up and nine evaluated chunks. No network
+download is required. The benchmark uses a separate seeded stream with drift;
+results and methodology are in `benchmark/stream_results.md` and its JSON file.
+
+### API contracts and edge cases
+
+- Numeric X is `(n_samples, n_features)`; y is a 1D array of matching length.
+  Empty inputs, feature mismatches, infinity and missing labels raise ValueError.
+  Tree labels may be numbers or strings of a consistent type.
+- Tree `fit(X,y)` replaces training state and clears pending data.
+  `partial_fit(X,y)` appends copies of chunks. At `buffer_size` or more rows,
+  it retrains once on **all** buffered rows and clears them. Prediction before
+  the first train raises ValueError. Between retrains the last tree is used.
+- Gini/entropy thresholds use `<=`; NaNs route left, including a possible
+  missing-only split. Majority ties select the first sorted class; equal gains
+  select the first feature/lower threshold. `max_features` uses the first k
+  features (also accepts `sqrt`, `log2`); selection is deterministic.
+- StandardScaler uses stable running population variance (ddof=0) ignoring NaNs.
+  Zero-variance columns use unit scale. All-missing columns start with mean zero
+  until observed. Mean imputation falls back to `fill_value` for unseen columns.
+- OneHotEncoder appends categories in encounter order per column; missing and
+  unknown categories map to zero. Growth changes feature width. The tree pipeline
+  buffers raw inputs and snapshots the latest transformers at each retrain, so
+  scaler drift and category growth cannot change the coordinates of an old tree.
+  `Pipeline.transform` uses current transformer state for transformer-only chains;
+  `predict` uses the matching snapshot for the classifier.
+- `ClassificationMetrics().update(y_true,y_pred,y_score=None).result()` returns
+  accuracy, macro precision/recall/F1, confusion matrix, classes and binary AUC.
+  Rows of the confusion matrix are true labels; columns are predicted labels.
+  AUC requires 0/1 labels (1 positive), finite scores on every update and returns
+  NaN for a single class. Tied scores get average ranks. `reset()` clears state.
+- `StreamingStats().update_stats(X).result(q=..., bins=...)` returns per-column
+  count, mean, population variance, exact quantiles and histograms. NaNs are
+  ignored; entirely missing columns have NaN moments and zero histogram counts.
+  Metrics and statistics accept a sample-count `window_size` and support reset.
+  Exact unwindowed quantiles/AUC retain history; they do not use bounded memory.
+- `StreamTrainer.fit_chunk` trains; `score_chunk` scores without training. Call
+  score before fit after warm-up. Logs include chunk/cumulative accuracy, update
+  time and serialized model bytes (not process RSS). A windowed trainer reports
+  windowed rather than lifetime accuracy.
+- `visualise` provides `plot_metric_over_time`, `compare_models`, and
+  `plot_predictions_vs_ground_truth`; each returns `(figure, axes)` and accepts
+  `save_path` and `show` (default False). Close figures after scripted use.
+
+### Verification and submission
+
+45 new streaming tests plus 156 existing tests pass (201 total), including plot
+file generation. Verification used the existing local `paiml` Python environment
+with matplotlib. Benchmark timings vary by machine and should be regenerated
+when comparing performance. The three-page technical report is
+`output/pdf/assignment2_2_report.pdf`.
+
+See `demo/recording_guide.md` for a five-minute recording outline. The actual
+screen recording and submission must be completed by the student. Use a fork
+and an individual branch as required by the assignment; do not merge the work
+into the original group main branch before submission.
