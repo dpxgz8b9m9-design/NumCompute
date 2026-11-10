@@ -3,9 +3,9 @@ from ._validation import matrix, labels
 
 
 class DecisionTreeClassifier:
-    def __init__(self, max_depth, min_samples_split=2, max_features=None,
+    def __init__(self, max_depth=5, min_samples_split=2, max_features=None,
                  buffer_size=500, criterion='gini'):
-        if max_features is not None and (not isinstance(max_depth, int) or max_depth < 0):
+        if max_depth is not None and (not isinstance(max_depth, int) or max_depth < 0):
             raise ValueError('max_depth must be a non-negative integer or None')
         if not isinstance(min_samples_split, int) or min_samples_split < 2:
             raise ValueError('min_samples_split must be greater than 2')
@@ -13,14 +13,14 @@ class DecisionTreeClassifier:
             raise ValueError('buffer_size must be positive')
         if criterion not in ['gini', 'entropy']:
             raise ValueError('criterion must be "gini" or "entropy"')
-        if max_features is not None and not (isinstance(max_features, int) and max_features > 0):
-            raise ValueError('max_features must be a positive integer')
+        if max_features is not None and not (isinstance(max_features, int) and max_features > 0) and max_features not in ('sqrt', 'log2'):
+            raise ValueError('max_features must be a positive integer, sqrt or log2')
 
         self.max_depth, self.min_samples_split = max_depth, min_samples_split
         self.max_features, self.buffer_size, self.criterion = max_features, buffer_size, criterion
         self.tree_ = None
         self.n_features_in_ = None
-        self._X, self._Y = [], []
+        self._X, self._y = [], []
         self.buffer_count_ = 0
         self.n_retrains_ = 0
 
@@ -33,8 +33,7 @@ class DecisionTreeClassifier:
         """Return (feature, threshold, left_mask), or None without positive gain."""
         best_gain, best = 0.0, None
         parent_impurity = self._impurity(counts)
-        feature_count = X.shape[1] if self.max_features is None else min(X.shape[1], self.max_features)
-        for feature in range(feature_count):
+        for feature in range(self._feature_count):
             column = X[:, feature]
             missing = np.isnan(column)
             values = np.unique(column[~missing])
@@ -99,7 +98,7 @@ class DecisionTreeClassifier:
         return self
 
     def partial_fit(self, X, y):
-        X = matrix(X)
+        X = matrix(X, self.n_features_in_)
         y = labels(y, len(X))
         self.n_features_in_ = X.shape[1]
         self._X.append(X.copy())
@@ -127,7 +126,7 @@ class DecisionTreeClassifier:
     def predict(self, X):
         if self.tree_ is None:
             raise ValueError("tree has not trained; provide at least buffer_size samples")
-        X = matrix(X)
+        X = matrix(X, self.n_features_in_)
         out = np.empty(len(X), dtype=int)
 
         self._visit(self.tree_, np.arange(len(X)), X, out)
