@@ -1,4 +1,5 @@
 import numpy as np
+from ._validation import matrix
 
 
 class StandardScaler:
@@ -10,13 +11,7 @@ class StandardScaler:
         return self.partial_fit(X)
 
     def partial_fit(self, X):
-        X = np.asarray(X, dtype=float)
-        n_features_ = None if self.mean_ is None else len(self.mean_)
-        if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-            raise ValueError("X must be a non-empty 2D array")
-        if n_features_ is not None and X.shape[1] != self.n_features_in_:
-            raise ValueError("feature count changed")
-
+        X = matrix(X, None if self.mean_ is None else len(self.mean_))
         if self.mean_ is None:
             self.count_ = np.zeros(X.shape[1], dtype=int)
             self.mean_ = np.zeros(X.shape[1])
@@ -47,14 +42,7 @@ class StandardScaler:
     def transform(self, X):
         if self.mean_ is None:
             raise ValueError("fit scaler first")
-
-        X = np.asarray(X, dtype=float)
-        if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-            raise ValueError("X must be a non-empty 2D array")
-        if len(self.mean_) is not None and X.shape[1] != len(self.mean_):
-            raise ValueError("feature count changed")
-
-        return (X - self.mean_) / self.scale_
+        return (matrix(X, len(self.mean_)) - self.mean_) / self.scale_
 
     def fit_transform(self, X):
         return self.fit(X).transform(X)
@@ -68,13 +56,7 @@ class MinMaxScaler(StandardScaler):
         self.feature_range = feature_range
 
     def partial_fit(self, X):
-        X = np.asarray(X, dtype=float)
-        n_features_ = None if self.mean_ is None else len(self.mean_)
-        if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-            raise ValueError("X must be a non-empty 2D array")
-        if n_features_ is not None and X.shape[1] != self.n_features_in_:
-            raise ValueError("feature count changed")
-
+        X = matrix(X, None if self.mean_ is None else len(self.mean_))
         first = self.mean_ is None
         super().partial_fit(X)
         lo = np.min(np.where(np.isnan(X), np.inf, X), axis=0)
@@ -86,13 +68,7 @@ class MinMaxScaler(StandardScaler):
     def transform(self, X):
         if self.mean_ is None:
             raise ValueError("fit scaler first")
-
-        X = np.asarray(X, dtype=float)
-        if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-            raise ValueError("X must be a non-empty 2D array")
-        if len(self.mean_) is not None and X.shape[1] != len(self.mean_):
-            raise ValueError("feature count changed")
-
+        X = matrix(X, len(self.mean_))
         lo = np.where(self.count_ > 0, self.data_min_, 0)
         hi = np.where(self.count_ > 0, self.data_max_, 0)
         span = np.where(hi > lo, hi - lo, 1)
@@ -121,13 +97,7 @@ class SimpleImputer(StandardScaler):
     def transform(self, X):
         if self.mean_ is None:
             raise ValueError("fit imputer first")
-
-        X = np.asarray(X, dtype=float)
-        if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-            raise ValueError("X must be a non-empty 2D array")
-        if len(self.mean_) is not None and X.shape[1] != len(self.mean_):
-            raise ValueError("feature count changed")
-
+        X = matrix(X, len(self.mean_))
         return np.where(np.isnan(X), self.statistics_, X)
 
 
@@ -146,7 +116,8 @@ class OneHotEncoder(StandardScaler):
         X = np.asarray(X, dtype=object)
         if X.ndim != 2 or not all(X.shape):
             raise ValueError("X must be non-empty and 2D array")
-        if self.categories_ is not None and X.shape[1] != len(self.categories_):
+        if self.categories_ is not None and X.shape[1] != len(
+                self.categories_):
             raise ValueError("feature count changed")
         return X
 
@@ -164,7 +135,10 @@ class OneHotEncoder(StandardScaler):
         if self.categories_ is None:
             raise ValueError("fit encoder first")
         X = self._validate(X)
-        return np.hstack([(X[:, j:j+1] == np.asarray(cats, dtype=object)).astype(float) for j, cats in enumerate(self.categories_)])
+        return np.hstack([(X[:,
+                             j:j + 1] == np.asarray(cats,
+                           dtype=object)).astype(float) for j,
+                          cats in enumerate(self.categories_)])
 
     def fit_transform(self, X):
         return self.fit(X).transform(X)

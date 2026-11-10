@@ -1,4 +1,6 @@
 import numpy as np
+from ._validation import matrix, labels
+
 
 class DecisionTreeClassifier:
     def __init__(self, max_depth, min_samples_split=2, max_features=None,
@@ -84,16 +86,8 @@ class DecisionTreeClassifier:
         return feature, threshold, left, right
 
     def fit(self, X, y):
-        X = np.asarray(X, dtype=float)
-        if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-            raise ValueError("X must be a non-empty 2D array")
-        if self.n_features_in_ is not None and X.shape[1] != self.n_features_in_:
-            raise ValueError("feature count changed")
-
-        y = np.asarray(y)
-        if y.ndim != 1 or len(y) != len(X):
-            raise ValueError("y must be 1D with one label per sample")
-
+        X = matrix(X)
+        y = labels(y, len(X))
         self.classes_, encoded = np.unique(y, return_inverse=True)
         d = X.shape[1]
         k = self.max_features
@@ -105,16 +99,8 @@ class DecisionTreeClassifier:
         return self
 
     def partial_fit(self, X, y):
-        X = np.asarray(X, dtype=float)
-        if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-            raise ValueError("X must be a non-empty 2D array")
-        if self.n_features_in_ is not None and X.shape[1] != self.n_features_in_:
-            raise ValueError("feature count changed")
-
-        y = np.asarray(y)
-        if y.ndim != 1 or len(y) != len(X):
-            raise ValueError("y must be 1D with one label per sample")
-
+        X = matrix(X)
+        y = labels(y, len(X))
         self.n_features_in_ = X.shape[1]
         self._X.append(X.copy())
         self._y.append(y.copy())
@@ -139,14 +125,9 @@ class DecisionTreeClassifier:
         self._visit(right, indices[~mask], X, out)
 
     def predict(self, X):
-        X = np.asarray(X, dtype=float)
-        if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-            raise ValueError("X must be a non-empty 2D array")
-        if self.n_features_in_ is not None and X.shape[1] != self.n_features_in_:
-            raise ValueError("feature count changed")
         if self.tree_ is None:
             raise ValueError("tree has not trained; provide at least buffer_size samples")
-
+        X = matrix(X)
         out = np.empty(len(X), dtype=int)
 
         self._visit(self.tree_, np.arange(len(X)), X, out)
